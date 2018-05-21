@@ -27,6 +27,9 @@ import argparse
 import atexit
 import getpass
 import ssl
+import json
+
+folder = "Infrastructure"
 
 def GetArgs():
    """
@@ -42,8 +45,8 @@ def GetArgs():
                        help='User name to use when connecting to host')
    parser.add_argument('-p', '--password', required=False, action='store',
                        help='Password to use when connecting to host')
-   parser.add_argument('-f', '--folder', required=True, action='store',
-                       help='Target folder to display') 
+#   parser.add_argument('-f', '--folder', required=True, action='store',
+#                       help='Target folder to display') 
    args = parser.parse_args()
    return args
 
@@ -65,20 +68,37 @@ def PrintVmInfo(vm, depth=1):
       for c in vmList:
          PrintVmInfo(c, depth+1)
       return
+
    summary = vm.summary
-   print("Name       : ", summary.config.name)
-   print("Path       : ", summary.config.vmPathName)
-   print("Guest      : ", summary.config.guestFullName)
+
+   out = {}
+   hostvars = {}
+   vmName = summary.config.name
+   hostvars[vmName] = {}
+   varObj = {}
+   varObj['name'] = summary.config.name
+   varObj['path'] = summary.config.vmPathName
+   varObj['guestFullName'] = summary.config.guestFullName
+
+#   print("Name       : ", summary.config.name)
+#   print("Path       : ", summary.config.vmPathName)
+#   print("Guest      : ", summary.config.guestFullName)
    annotation = summary.config.annotation
    if annotation != None and annotation != "":
-      print("Annotation : ", annotation)
-   print("State      : ", summary.runtime.powerState)
+#      print("Annotation : ", annotation)
+       varObj['annotation'] = summary.config.annotation
+#   print("State      : ", summary.runtime.powerState)
+   varObj['state'] = summary.runtime.powerState
    if summary.guest != None:
       ip = summary.guest.ipAddress
       if ip != None and ip != "":
-         print("IP         : ", ip)
-   if summary.runtime.question != None:
-      print("Question  : ", summary.runtime.question.text)
+#         print("IP         : ", ip)
+          varObj['ip'] = summary.guest.ipAddress
+   
+   hostvars[vmName] = varObj
+   out['_meta'] = { 'hostvars' : hostvars }
+
+   print(json.dumps(out,sort_keys=True, indent=4))
    print("")
 
 def SearchFolder(currFolder, targetFolder):
@@ -126,7 +146,7 @@ def main():
          itemList = vmFolder.childEntity
          for item in itemList:
 		if hasattr(item, 'childEntity'):
-         	   SearchFolder(item,args.folder)
+         	   SearchFolder(item,folder)
    return 0
 
 # Start program
