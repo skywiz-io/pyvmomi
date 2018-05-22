@@ -1,24 +1,10 @@
 #!/usr/bin/env python
-# VMware vSphere Python SDK
-# Copyright (c) 2008-2015 VMware, Inc. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
-"""
-Python program for listing the vms on an ESX / vCenter host
-"""
 
 from __future__ import print_function
+
+import sys
+sys.path.insert(0, "/home/danco/workspace/pyvmomi")
 
 from pyVim.connect import SmartConnect, Disconnect
 from pyVmomi import vim
@@ -29,7 +15,7 @@ import getpass
 import ssl
 import json
 
-folder = "Infrastructure"
+folder = "Dan"
 
 def GetArgs():
    """
@@ -51,63 +37,62 @@ def GetArgs():
    return args
 
 
+out = {}
+out['group'] = { 'hosts' : [], 'vars' : {'ansible_ssh_user': 'vagrant','ansible_ssh_private_key_file':'~/.vagrant.d/insecure_private_key','example_variable': 'value'}}
 
-def PrintVmInfo(vm, depth=1):
+
+hostvars = {}
+ 
+
+def PrintVmInfo(folder, depth=1):
    """
    Print information for a particular virtual machine or recurse into a folder
    or vApp with depth protection
    """
-   maxdepth = 10
 
-   # if this is a group it will have children. if it does, recurse into them
-   # and then return
-   if hasattr(vm, 'childEntity'):
-      if depth > maxdepth:
-         return
-      vmList = vm.childEntity
-      for c in vmList:
-         PrintVmInfo(c, depth+1)
-      return
 
-   summary = vm.summary
+ 
+   vmList = folder.childEntity
+   for item in vmList:
+      if not hasattr(item,'childEntity'):
+             summary = item.summary
 
-   out = {}
-   hostvars = {}
-   vmName = summary.config.name
-   hostvars[vmName] = {}
-   varObj = {}
-   varObj['name'] = summary.config.name
-   varObj['path'] = summary.config.vmPathName
-   varObj['guestFullName'] = summary.config.guestFullName
+             if summary.guest != None:
+                 ip = summary.guest.ipAddress
+                 if ip != None and ip != "":
+                     vmName = summary.guest.ipAddress
+                     out['group']['hosts'].append(vmName)
+                 else:
+                     vmName = "N/A"
 
-#   print("Name       : ", summary.config.name)
-#   print("Path       : ", summary.config.vmPathName)
-#   print("Guest      : ", summary.config.guestFullName)
-   annotation = summary.config.annotation
-   if annotation != None and annotation != "":
-#      print("Annotation : ", annotation)
-       varObj['annotation'] = summary.config.annotation
-#   print("State      : ", summary.runtime.powerState)
-   varObj['state'] = summary.runtime.powerState
-   if summary.guest != None:
-      ip = summary.guest.ipAddress
-      if ip != None and ip != "":
-#         print("IP         : ", ip)
-          varObj['ip'] = summary.guest.ipAddress
+             hostvars[vmName] = {}
+             varObj = {}
+             varObj['name'] = summary.config.name
+             varObj['path'] = summary.config.vmPathName
+             varObj['guestFullName'] = summary.config.guestFullName
+             annotation = summary.config.annotation
+             if annotation != None and annotation != "":
+                varObj['annotation'] = summary.config.annotation
+
+             varObj['state'] = summary.runtime.powerState
+             if summary.guest != None:
+                 ip = summary.guest.ipAddress
+                 if ip != None and ip != "":
+                     varObj['ip'] = summary.guest.ipAddress
    
-   hostvars[vmName] = varObj
-   out['_meta'] = { 'hostvars' : hostvars }
-
-   print(json.dumps(out,sort_keys=True, indent=4))
-   print("")
+             hostvars[vmName] = varObj
+      else:
+             PrintVmInfo(item)
+   
+  
 
 def SearchFolder(currFolder, targetFolder):
    if currFolder.name == targetFolder:
-	PrintVmInfo(currFolder)
+        PrintVmInfo(currFolder)
         return 0
    children = currFolder.childEntity
    for child in children:
-	if hasattr(child, 'childEntity'):
+       if hasattr(child, 'childEntity'):
           SearchFolder(child, targetFolder)
 
 
@@ -145,8 +130,14 @@ def main():
          vmFolder = datacenter.vmFolder
          itemList = vmFolder.childEntity
          for item in itemList:
-		if hasattr(item, 'childEntity'):
-         	   SearchFolder(item,folder)
+               if hasattr(item, 'childEntity'):
+                   SearchFolder(item,folder)
+
+
+   out['_meta'] = { 'hostvars' : hostvars }
+
+   print(json.dumps(out,sort_keys=True, indent=4))
+   print("")
    return 0
 
 # Start program
